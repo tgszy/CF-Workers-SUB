@@ -1055,7 +1055,7 @@ async function KV(request, env, txt = 'LINK.txt', guest) {
 
         ${hasKV ? `
         let nodes = [];
-        const originalContent = \`${content.replace(/`/g, '\\`').replace(/\n/g, '\\n')}\`;
+        let originalContent = '${content.replace(/'/g, "\\'").replace(/\n/g, '\\n')}';
         if (originalContent.trim()) {
             nodes = originalContent.split('\\n').filter(line => line.trim()).map(line => {
                 const protocolMatch = line.match(/^(\\w+):/);
@@ -1191,3 +1191,4 @@ async function KV(request, env, txt = 'LINK.txt', guest) {
 		});
 	}
 }
+```命名空间
