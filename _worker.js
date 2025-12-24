@@ -204,7 +204,6 @@ export default {
 				"content-type": "text/plain; charset=utf-8",
 				"Profile-Update-Interval": `${SUBUpdateTime}`,
 				"Profile-web-page-url": request.url.includes('?') ? request.url.split('?')[0] : request.url,
-				//"Subscription-Userinfo": `upload=${UD}; download=${UD}; total=${total}; expire=${expire}`,
 			};
 
 			if (订阅格式 == 'base64' || token == fakeToken) {
@@ -221,11 +220,10 @@ export default {
 				subConverterUrl = `${subProtocol}://${subConverter}/sub?target=loon&url=${encodeURIComponent(订阅转换URL)}&insert=false&config=${encodeURIComponent(subConfig)}&emoji=true&list=false&tfo=false&scv=true&fdn=false&sort=false`;
 			}
 			try {
-				const subConverterResponse = await fetch(subConverterUrl, { headers: { 'User-Agent': userAgentHeader } });//订阅转换
+				const subConverterResponse = await fetch(subConverterUrl, { headers: { 'User-Agent': userAgentHeader } });
 				if (!subConverterResponse.ok) return new Response(base64Data, { headers: responseHeaders });
 				let subConverterContent = await subConverterResponse.text();
 				if (订阅格式 == 'clash') subConverterContent = await clashFix(subConverterContent);
-				// 只有非浏览器订阅才会返回SUBNAME
 				if (!userAgent.includes('mozilla')) responseHeaders["Content-Disposition"] = `attachment; filename*=utf-8''${encodeURIComponent(FileName)}`;
 				return new Response(subConverterContent, { headers: responseHeaders });
 			} catch (error) {
@@ -491,7 +489,6 @@ async function KV(request, env, txt = 'LINK.txt', guest) {
 					}
 					return new Response("更新成功");
 				} catch (e) {
-					// 如果不是 JSON，则视为 LINK.txt 的纯文本
 					await env.KV.put(txt, body);
 					return new Response("保存成功");
 				}
@@ -669,10 +666,26 @@ async function KV(request, env, txt = 'LINK.txt', guest) {
             font-size: 14px;
             color: #666;
         }
-        .var-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 20px;
+        .var-item {
+            margin-bottom: 20px;
+        }
+        .var-item label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+        .var-item small {
+            display: block;
+            color: #888;
+            font-size: 13px;
+            margin-top: 4px;
+        }
+        .var-item input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            box-sizing: border-box;
         }
         footer {
             text-align: center;
@@ -682,7 +695,7 @@ async function KV(request, env, txt = 'LINK.txt', guest) {
             background: #f9f9f9;
         }
         @media (max-width: 768px) {
-            .links-grid, .var-grid {
+            .links-grid {
                 grid-template-columns: 1fr;
             }
             header {
@@ -798,55 +811,38 @@ async function KV(request, env, txt = 'LINK.txt', guest) {
 
         <div class="section">
             <h2>编辑变量配置</h2>
-            <div class="var-grid">
-                <div>
-                    <label for="TOKEN">TOKEN：</label>
+            <button class="toggle-btn" id="varToggle" onclick="toggleVars()">展开变量配置 ↓</button>
+            <div id="varSection" class="hidden">
+                <div class="var-item">
+                    <label for="TOKEN">TOKEN（主人访问令牌）</label>
+                    <small>用于浏览器访问本配置页的路径令牌，例如设置为 abc 则访问 https://your.domain/abc</small>
                     <input id="TOKEN" class="var-input" value="${mytoken}" />
                 </div>
-                <div>
-                    <label for="GUESTTOKEN">GUESTTOKEN：</label>
+                <div class="var-item">
+                    <label for="GUESTTOKEN">GUESTTOKEN（访客订阅令牌）</label>
+                    <small>访客通过 /sub?token=xxx 访问订阅链接的令牌，可随便设置或留空自动生成</small>
                     <input id="GUESTTOKEN" class="var-input" value="${guestToken}" />
                 </div>
-                <div>
-                    <label for="TGTOKEN">TGTOKEN：</label>
+                <div class="var-item">
+                    <label for="TGTOKEN">TGTOKEN（Telegram Bot Token）</label>
+                    <small>用于接收访问通知的 Bot Token，可留空不启用通知</small>
                     <input id="TGTOKEN" class="var-input" value="${BotToken}" />
                 </div>
-                <div>
-                    <label for="TGID">TGID：</label>
+                <div class="var-item">
+                    <label for="TGID">TGID（Telegram Chat ID）</label>
+                    <small>接收通知的聊天ID，可通过 @userinfobot 获取</small>
                     <input id="TGID" class="var-input" value="${ChatID}" />
                 </div>
-                <div>
-                    <label for="TG">TG：</label>
-                    <input id="TG" class="var-input" value="${TG}" type="number" />
-                </div>
-                <div>
-                    <label for="SUBNAME">SUBNAME：</label>
-                    <input id="SUBNAME" class="var-input" value="${FileName}" />
-                </div>
-                <div>
-                    <label for="SUBUPTIME">SUBUPTIME：</label>
-                    <input id="SUBUPTIME" class="var-input" value="${SUBUpdateTime}" type="number" />
-                </div>
-                <div>
-                    <label for="TOTAL">TOTAL (TB)：</label>
+                <div class="var-item">
+                    <label for="TOTAL">TOTAL（流量总量，单位 TB）</label>
+                    <small>订阅头显示的总流量，纯展示用，默认为 99 TB</small>
                     <input id="TOTAL" class="var-input" value="${total}" type="number" step="0.01" />
                 </div>
-                <div>
-                    <label for="TIMESTAMP">TIMESTAMP：</label>
-                    <input id="TIMESTAMP" class="var-input" value="${timestamp}" type="number" />
+
+                <div class="save-container" style="margin-top: 30px;">
+                    <button class="save-btn" onclick="updateVars(this)">更新变量</button>
+                    <span class="save-status" id="varStatus"></span>
                 </div>
-                <div>
-                    <label for="LINKSUB">LINKSUB：</label>
-                    <input id="LINKSUB" class="var-input" value="${linkSub}" />
-                </div>
-                <div>
-                    <label for="WARP">WARP：</label>
-                    <input id="WARP" class="var-input" value="${warp}" />
-                </div>
-            </div>
-            <div class="save-container" style="margin-top: 20px;">
-                <button class="save-btn" onclick="updateVars(this)">更新</button>
-                <span class="save-status" id="varStatus"></span>
             </div>
         </div>
 
@@ -917,6 +913,18 @@ async function KV(request, env, txt = 'LINK.txt', guest) {
             }
         }
 
+        function toggleVars() {
+            const section = document.getElementById('varSection');
+            const btn = document.getElementById('varToggle');
+            if (section.classList.contains('hidden')) {
+                section.classList.remove('hidden');
+                btn.innerHTML = '收起变量配置 ↑';
+            } else {
+                section.classList.add('hidden');
+                btn.innerHTML = '展开变量配置 ↓';
+            }
+        }
+
         function updateSubConfig(btn) {
             btn.disabled = true;
             btn.textContent = '更新中...';
@@ -951,7 +959,7 @@ async function KV(request, env, txt = 'LINK.txt', guest) {
             btn.textContent = '更新中...';
 
             const vals = {};
-            document.querySelectorAll('.var-input').forEach(inp => {
+            document.querySelectorAll('#varSection .var-input').forEach(inp => {
                 vals[inp.id] = inp.value;
             });
 
@@ -971,7 +979,7 @@ async function KV(request, env, txt = 'LINK.txt', guest) {
             })
             .finally(() => {
                 btn.disabled = false;
-                btn.textContent = '更新';
+                btn.textContent = '更新变量';
             });
         }
 
