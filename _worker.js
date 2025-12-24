@@ -19,8 +19,6 @@ let urls = [];
 let subConverter = "SUBAPI.cmliussss.net"; //在线订阅转换后端，目前使用CM的订阅转换功能。支持自建psub 可自行搭建https://github.com/bulianglin/psub
 let subConfig = "https://raw.githubusercontent.com/cmliu/ACL4SSR/main/Clash/config/ACL4SSR_Online_MultiCountry.ini"; //订阅配置文件
 let subProtocol = 'https';
-let linkSub = '';
-let warp = '';
 
 export default {
 	async fetch(request, env) {
@@ -28,55 +26,33 @@ export default {
 		const userAgent = userAgentHeader ? userAgentHeader.toLowerCase() : "null";
 		const url = new URL(request.url);
 		const token = url.searchParams.get('token');
-
-		// 从 KV 加载变量，优先 KV > env > 默认
-		if (env.KV) {
-			mytoken = await env.KV.get('TOKEN') || env.TOKEN || mytoken;
-			guestToken = await env.KV.get('GUESTTOKEN') || env.GUESTTOKEN || env.GUEST || guestToken;
-			BotToken = await env.KV.get('TGTOKEN') || env.TGTOKEN || BotToken;
-			ChatID = await env.KV.get('TGID') || env.TGID || ChatID;
-			TG = parseInt(await env.KV.get('TG') || env.TG || TG);
-			FileName = await env.KV.get('SUBNAME') || env.SUBNAME || FileName;
-			SUBUpdateTime = parseInt(await env.KV.get('SUBUPTIME') || env.SUBUPTIME || SUBUpdateTime);
-			total = parseFloat(await env.KV.get('TOTAL') || env.TOTAL || total);
-			timestamp = parseInt(await env.KV.get('TIMESTAMP') || env.TIMESTAMP || timestamp);
-			subConverter = await env.KV.get('SUBAPI') || env.SUBAPI || subConverter;
-			subConfig = await env.KV.get('SUBCONFIG') || env.SUBCONFIG || subConfig;
-			linkSub = await env.KV.get('LINKSUB') || env.LINKSUB || '';
-			warp = await env.KV.get('WARP') || env.WARP || '';
-		} else {
-			mytoken = env.TOKEN || mytoken;
-			guestToken = env.GUESTTOKEN || env.GUEST || guestToken;
-			BotToken = env.TGTOKEN || BotToken;
-			ChatID = env.TGID || ChatID;
-			TG = env.TG || TG;
-			FileName = env.SUBNAME || FileName;
-			SUBUpdateTime = env.SUBUPTIME || SUBUpdateTime;
-			total = env.TOTAL || total;
-			timestamp = env.TIMESTAMP || timestamp;
-			subConverter = env.SUBAPI || subConverter;
-			subConfig = env.SUBCONFIG || subConfig;
-			linkSub = env.LINKSUB || '';
-			warp = env.WARP || '';
-		}
-
+		mytoken = env.TOKEN || mytoken;
+		BotToken = env.TGTOKEN || BotToken;
+		ChatID = env.TGID || ChatID;
+		TG = env.TG || TG;
+		subConverter = env.SUBAPI || subConverter;
 		if (subConverter.includes("http://")) {
 			subConverter = subConverter.split("//")[1];
 			subProtocol = 'http';
 		} else {
 			subConverter = subConverter.split("//")[1] || subConverter;
 		}
+		subConfig = env.SUBCONFIG || subConfig;
+		FileName = env.SUBNAME || FileName;
 
 		const currentDate = new Date();
 		currentDate.setHours(0, 0, 0, 0);
 		const timeTemp = Math.ceil(currentDate.getTime() / 1000);
 		const fakeToken = await MD5MD5(`${mytoken}${timeTemp}`);
+		guestToken = env.GUESTTOKEN || env.GUEST || guestToken;
 		if (!guestToken) guestToken = await MD5MD5(mytoken);
 		const 访客订阅 = guestToken;
+		//console.log(`${fakeUserID}\n${fakeHostName}`); // 打印fakeID
 
 		let UD = Math.floor(((timestamp - Date.now()) / timestamp * total * 1099511627776) / 2);
 		total = total * 1099511627776;
 		let expire = Math.floor(timestamp / 1000);
+		SUBUpdateTime = env.SUBUPTIME || SUBUpdateTime;
 
 		if (!([mytoken, fakeToken, 访客订阅].includes(token) || url.pathname == ("/" + mytoken) || url.pathname.includes("/" + mytoken + "?"))) {
 			if (TG == 1 && url.pathname !== "/" && url.pathname !== "/favicon.ico") await sendMessage(`#异常访问 ${FileName}`, request.headers.get('CF-Connecting-IP'), `UA: ${userAgent}</tg-spoiler>\n域名: ${url.hostname}\n<tg-spoiler>入口: ${url.pathname + url.search}</tg-spoiler>`);
@@ -99,7 +75,7 @@ export default {
 				}
 			} else {
 				MainData = env.LINK || MainData;
-				if (linkSub) urls = await ADD(linkSub);
+				if (env.LINKSUB) urls = await ADD(env.LINKSUB);
 			}
 			let 重新汇总所有链接 = await ADD(MainData + '\n' + urls.join('\n'));
 			let 自建节点 = "";
@@ -132,6 +108,7 @@ export default {
 
 			let subConverterUrl;
 			let 订阅转换URL = `${url.origin}/${await MD5MD5(fakeToken)}?token=${fakeToken}`;
+			//console.log(订阅转换URL);
 			let req_data = MainData;
 
 			let 追加UA = 'v2rayn';
@@ -142,9 +119,10 @@ export default {
 			else if (url.searchParams.has('quanx')) 追加UA = 'Quantumult%20X';
 			else if (url.searchParams.has('loon')) 追加UA = 'Loon';
 
-			const 订阅链接数组 = [...new Set(urls)].filter(item => item?.trim?.());
+			const 订阅链接数组 = [...new Set(urls)].filter(item => item?.trim?.()); // 去重
 			if (订阅链接数组.length > 0) {
 				const 请求订阅响应内容 = await getSUB(订阅链接数组, request, 追加UA, userAgentHeader);
+				console.log(请求订阅响应内容);
 				req_data += 请求订阅响应内容[0].join('\n');
 				订阅转换URL += "|" + 请求订阅响应内容[1];
 				if (订阅格式 == 'base64' && !isSubConverterRequest && 请求订阅响应内容[1].includes('://')) {
@@ -161,16 +139,18 @@ export default {
 				}
 			}
 
-			if (warp) 订阅转换URL += "|" + (await ADD(warp)).join("|");
+			if (env.WARP) 订阅转换URL += "|" + (await ADD(env.WARP)).join("|");
 			//修复中文错误
 			const utf8Encoder = new TextEncoder();
 			const encodedData = utf8Encoder.encode(req_data);
+			//const text = String.fromCharCode.apply(null, encodedData);
 			const utf8Decoder = new TextDecoder();
 			const text = utf8Decoder.decode(encodedData);
 
 			//去重
 			const uniqueLines = new Set(text.split('\n'));
 			const result = [...uniqueLines].join('\n');
+			//console.log(result);
 
 			let base64Data;
 			try {
@@ -204,6 +184,7 @@ export default {
 				"content-type": "text/plain; charset=utf-8",
 				"Profile-Update-Interval": `${SUBUpdateTime}`,
 				"Profile-web-page-url": request.url.includes('?') ? request.url.split('?')[0] : request.url,
+				//"Subscription-Userinfo": `upload=${UD}; download=${UD}; total=${total}; expire=${expire}`,
 			};
 
 			if (订阅格式 == 'base64' || token == fakeToken) {
@@ -219,6 +200,7 @@ export default {
 			} else if (订阅格式 == 'loon') {
 				subConverterUrl = `${subProtocol}://${subConverter}/sub?target=loon&url=${encodeURIComponent(订阅转换URL)}&insert=false&config=${encodeURIComponent(subConfig)}&emoji=true&list=false&tfo=false&scv=true&fdn=false&sort=false`;
 			}
+			//console.log(订阅转换URL);
 			try {
 				const subConverterResponse = await fetch(subConverterUrl, { headers: { 'User-Agent': userAgentHeader } });//订阅转换
 				if (!subConverterResponse.ok) return new Response(base64Data, { headers: responseHeaders });
@@ -1073,7 +1055,7 @@ async function KV(request, env, txt = 'LINK.txt', guest) {
 
         ${hasKV ? `
         let nodes = [];
-        const originalContent = \`${content.replace(/`/g, '\\`')}\`;
+        const originalContent = \`${content.replace(/`/g, '\\`').replace(/\n/g, '\\n')}\`;
         if (originalContent.trim()) {
             nodes = originalContent.split('\\n').filter(line => line.trim()).map(line => {
                 const protocolMatch = line.match(/^(\\w+):/);
@@ -1209,4 +1191,3 @@ async function KV(request, env, txt = 'LINK.txt', guest) {
 		});
 	}
 }
-``` ` :
