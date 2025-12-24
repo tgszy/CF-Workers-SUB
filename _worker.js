@@ -1,7 +1,7 @@
 // 部署完成后在网址后面加上这个，获取自建节点和机场聚合节点，/?token=auto或/auto或
 
 let mytoken = 'auto';
-let ADMIN_PASS = 'your_password_here'; // 新增：访问配置面板的密钥，请务必修改！
+let ADMIN_PASS = 'password'; // 新增：访问配置面板的密钥，请务必修改！
 let BotToken = ''; //可以为空，或者@BotFather中输入/start，/newbot，并关注机器人
 let ChatID = ''; //可以为空，或者@userinfobot中获取，/start
 let TG = 0; //小白勿动， 开发者专用，1 为推送所有的访问信息，0 为不推送
@@ -583,3 +583,4 @@ async function KV(request, env, txt = 'LINK.txt') {
 		return new Response("服务器错误: " + error.message, { status: 500 });
 	}
 }
+
