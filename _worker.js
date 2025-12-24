@@ -220,10 +220,11 @@ export default {
 				subConverterUrl = `${subProtocol}://${subConverter}/sub?target=loon&url=${encodeURIComponent(订阅转换URL)}&insert=false&config=${encodeURIComponent(subConfig)}&emoji=true&list=false&tfo=false&scv=true&fdn=false&sort=false`;
 			}
 			try {
-				const subConverterResponse = await fetch(subConverterUrl, { headers: { 'User-Agent': userAgentHeader } });
+				const subConverterResponse = await fetch(subConverterUrl, { headers: { 'User-Agent': userAgentHeader } });//订阅转换
 				if (!subConverterResponse.ok) return new Response(base64Data, { headers: responseHeaders });
 				let subConverterContent = await subConverterResponse.text();
 				if (订阅格式 == 'clash') subConverterContent = await clashFix(subConverterContent);
+				// 只有非浏览器订阅才会返回SUBNAME
 				if (!userAgent.includes('mozilla')) responseHeaders["Content-Disposition"] = `attachment; filename*=utf-8''${encodeURIComponent(FileName)}`;
 				return new Response(subConverterContent, { headers: responseHeaders });
 			} catch (error) {
@@ -234,10 +235,12 @@ export default {
 };
 
 async function ADD(envadd) {
-	var addtext = envadd.replace(/[	"'|\r\n]+/g, '\n').replace(/\n+/g, '\n');
+	var addtext = envadd.replace(/[	"'|\r\n]+/g, '\n').replace(/\n+/g, '\n');	// 替换为换行
+	//console.log(addtext);
 	if (addtext.charAt(0) == '\n') addtext = addtext.slice(1);
 	if (addtext.charAt(addtext.length - 1) == '\n') addtext = addtext.slice(0, addtext.length - 1);
 	const add = addtext.split('\n');
+	//console.log(add);
 	return add;
 }
 
@@ -344,27 +347,37 @@ async function proxyURL(proxyURL, url) {
 	const URLs = await ADD(proxyURL);
 	const fullURL = URLs[Math.floor(Math.random() * URLs.length)];
 
+	// 解析目标 URL
 	let parsedURL = new URL(fullURL);
+	console.log(parsedURL);
+	// 提取并可能修改 URL 组件
 	let URLProtocol = parsedURL.protocol.slice(0, -1) || 'https';
 	let URLHostname = parsedURL.hostname;
 	let URLPathname = parsedURL.pathname;
 	let URLSearch = parsedURL.search;
 
+	// 处理 pathname
 	if (URLPathname.charAt(URLPathname.length - 1) == '/') {
 		URLPathname = URLPathname.slice(0, -1);
 	}
 	URLPathname += url.pathname;
 
+	// 构建新的 URL
 	let newURL = `${URLProtocol}://${URLHostname}${URLPathname}${URLSearch}`;
 
+	// 反向代理请求
 	let response = await fetch(newURL);
 
+	// 创建新的响应
 	let newResponse = new Response(response.body, {
 		status: response.status,
 		statusText: response.statusText,
 		headers: response.headers
 	});
 
+	// 添加自定义头部，包含 URL 信息
+	//newResponse.headers.set('X-Proxied-By', 'Cloudflare Worker');
+	//newResponse.headers.set('X-Original-URL', fullURL);
 	newResponse.headers.set('X-New-URL', newURL);
 
 	return newResponse;
@@ -373,53 +386,63 @@ async function proxyURL(proxyURL, url) {
 async function getSUB(api, request, 追加UA, userAgentHeader) {
 	if (!api || api.length === 0) {
 		return [];
-	} else api = [...new Set(api)];
+	} else api = [...new Set(api)]; // 去重
 	let newapi = "";
 	let 订阅转换URLs = "";
 	let 异常订阅 = "";
-	const controller = new AbortController();
+	const controller = new AbortController(); // 创建一个AbortController实例，用于取消请求
 	const timeout = setTimeout(() => {
-		controller.abort();
+		controller.abort(); // 2秒后取消所有请求
 	}, 2000);
 
 	try {
+		// 使用Promise.allSettled等待所有API请求完成，无论成功或失败
 		const responses = await Promise.allSettled(api.map(apiUrl => getUrl(request, apiUrl, 追加UA, userAgentHeader).then(response => response.ok ? response.text() : Promise.reject(response))));
 
+		// 遍历所有响应
 		const modifiedResponses = responses.map((response, index) => {
+			// 检查是否请求成功
 			if (response.status === 'rejected') {
 				const reason = response.reason;
 				if (reason && reason.name === 'AbortError') {
 					return {
 						status: '超时',
 						value: null,
-						apiUrl: api[index]
+						apiUrl: api[index] // 将原始的apiUrl添加到返回对象中
 					};
 				}
 				console.error(`请求失败: ${api[index]}, 错误信息: ${reason.status} ${reason.statusText}`);
 				return {
 					status: '请求失败',
 					value: null,
-					apiUrl: api[index]
+					apiUrl: api[index] // 将原始的apiUrl添加到返回对象中
 				};
 			}
 			return {
 				status: response.status,
 				value: response.value,
-				apiUrl: api[index]
+				apiUrl: api[index] // 将原始的apiUrl添加到返回对象中
 			};
 		});
 
+		console.log(modifiedResponses); // 输出修改后的响应数组
+
 		for (const response of modifiedResponses) {
+			// 检查响应状态是否为'fulfilled'
 			if (response.status === 'fulfilled') {
-				const content = await response.value || 'null';
+				const content = await response.value || 'null'; // 获取响应的内容
 				if (content.includes('proxies:')) {
-					订阅转换URLs += "|" + response.apiUrl;
+					//console.log('Clash订阅: ' + response.apiUrl);
+					订阅转换URLs += "|" + response.apiUrl; // Clash 配置
 				} else if (content.includes('outbounds"') && content.includes('inbounds"')) {
-					订阅转换URLs += "|" + response.apiUrl;
+					//console.log('Singbox订阅: ' + response.apiUrl);
+					订阅转换URLs += "|" + response.apiUrl; // Singbox 配置
 				} else if (content.includes('://')) {
-					newapi += content + '\n';
+					//console.log('明文订阅: ' + response.apiUrl);
+					newapi += content + '\n'; // 追加内容
 				} else if (isValidBase64(content)) {
-					newapi += base64Decode(content) + '\n';
+					//console.log('Base64订阅: ' + response.apiUrl);
+					newapi += base64Decode(content) + '\n'; // 解码并追加内容
 				} else {
 					const 异常订阅LINK = `trojan://CMLiussss@127.0.0.1:8888?security=tls&allowInsecure=1&type=tcp&headerType=none#%E5%BC%82%E5%B8%B8%E8%AE%A2%E9%98%85%20${response.apiUrl.split('://')[1].split('/')[0]}`;
 					console.log('异常订阅: ' + 异常订阅LINK);
@@ -428,35 +451,49 @@ async function getSUB(api, request, 追加UA, userAgentHeader) {
 			}
 		}
 	} catch (error) {
-		console.error(error);
+		console.error(error); // 捕获并输出错误信息
 	} finally {
-		clearTimeout(timeout);
+		clearTimeout(timeout); // 清除定时器
 	}
 
-	const 订阅内容 = await ADD(newapi + 异常订阅);
+	const 订阅内容 = await ADD(newapi + 异常订阅); // 将处理后的内容转换为数组
+	// 返回处理后的结果
 	return [订阅内容, 订阅转换URLs];
 }
 
 async function getUrl(request, targetUrl, 追加UA, userAgentHeader) {
+	// 设置自定义 User-Agent
 	const newHeaders = new Headers(request.headers);
 	newHeaders.set("User-Agent", `${atob('djJyYXlOLzYuNDU=')} cmliu/CF-Workers-SUB ${追加UA}(${userAgentHeader})`);
 
+	// 构建新的请求对象
 	const modifiedRequest = new Request(targetUrl, {
 		method: request.method,
 		headers: newHeaders,
 		body: request.method === "GET" ? null : request.body,
 		redirect: "follow",
 		cf: {
+			// 忽略SSL证书验证
 			insecureSkipVerify: true,
+			// 允许自签名证书
 			allowUntrusted: true,
+			// 禁用证书验证
 			validateCertificate: false
 		}
 	});
 
+	// 输出请求的详细信息
+	console.log(`请求URL: ${targetUrl}`);
+	console.log(`请求头: ${JSON.stringify([...newHeaders])}`);
+	console.log(`请求方法: ${request.method}`);
+	console.log(`请求体: ${request.method === "GET" ? null : request.body}`);
+
+	// 发送请求并返回响应
 	return fetch(modifiedRequest);
 }
 
 function isValidBase64(str) {
+	// 先移除所有空白字符(空格、换行、回车等)
 	const cleanStr = str.replace(/\s/g, '');
 	const base64Regex = /^[A-Za-z0-9+/=]+$/;
 	return base64Regex.test(cleanStr);
@@ -467,7 +504,9 @@ async function 迁移地址列表(env, txt = 'ADD.txt') {
 	const 新数据 = await env.KV.get(txt);
 
 	if (旧数据 && !新数据) {
+		// 写入新位置
 		await env.KV.put(txt, 旧数据);
+		// 删除旧数据
 		await env.KV.delete(`/${txt}`);
 		return true;
 	}
@@ -477,27 +516,20 @@ async function 迁移地址列表(env, txt = 'ADD.txt') {
 async function KV(request, env, txt = 'LINK.txt', guest) {
 	const url = new URL(request.url);
 	try {
+		// POST请求处理
 		if (request.method === "POST") {
 			if (!env.KV) return new Response("未绑定KV空间", { status: 400 });
 			try {
-				const body = await request.text();
-				let data;
-				try {
-					data = JSON.parse(body);
-					for (let [key, val] of Object.entries(data)) {
-						await env.KV.put(key, val);
-					}
-					return new Response("更新成功");
-				} catch (e) {
-					await env.KV.put(txt, body);
-					return new Response("保存成功");
-				}
+				const content = await request.text();
+				await env.KV.put(txt, content);
+				return new Response("保存成功");
 			} catch (error) {
 				console.error('保存KV时发生错误:', error);
 				return new Response("保存失败: " + error.message, { status: 500 });
 			}
 		}
 
+		// GET请求部分
 		let content = '';
 		let hasKV = !!env.KV;
 
@@ -607,15 +639,6 @@ async function KV(request, env, txt = 'LINK.txt', guest) {
         .hidden {
             display: none;
         }
-        .config-info {
-            background: #eef;
-            padding: 15px;
-            border-radius: 8px;
-            font-size: 14px;
-        }
-        .config-info strong {
-            color: #444;
-        }
         .config-form label {
             display: block;
             margin: 10px 0 5px;
@@ -627,44 +650,6 @@ async function KV(request, env, txt = 'LINK.txt', guest) {
             border: 1px solid #ddd;
             border-radius: 6px;
             box-sizing: border-box;
-        }
-        textarea.editor {
-            width: 100%;
-            height: 400px;
-            padding: 15px;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            font-family: 'Courier New', monospace;
-            font-size: 14px;
-            line-height: 1.5;
-            box-sizing: border-box;
-            margin-bottom: 15px;
-        }
-        .save-container {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-        }
-        .save-btn {
-            background: #667eea;
-            color: white;
-            border: none;
-            padding: 10px 25px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 16px;
-            transition: background 0.3s;
-        }
-        .save-btn:hover {
-            background: #5a6fd8;
-        }
-        .save-btn:disabled {
-            background: #aaa;
-            cursor: not-allowed;
-        }
-        .save-status {
-            font-size: 14px;
-            color: #666;
         }
         .var-item {
             margin-bottom: 20px;
@@ -687,6 +672,114 @@ async function KV(request, env, txt = 'LINK.txt', guest) {
             border-radius: 6px;
             box-sizing: border-box;
         }
+        .save-container {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-top: 15px;
+        }
+        .save-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 10px 25px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background 0.3s;
+        }
+        .save-btn:hover {
+            background: #5a6fd8;
+        }
+        .save-btn:disabled {
+            background: #aaa;
+            cursor: not-allowed;
+        }
+        .save-status {
+            font-size: 14px;
+            color: #666;
+        }
+        .node-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .node-card {
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            position: relative;
+        }
+        .node-protocol {
+            font-weight: bold;
+            padding: 4px 8px;
+            border-radius: 4px;
+            color: white;
+            display: inline-block;
+            margin-bottom: 10px;
+        }
+        .protocol-vmess { background: #007bff; }
+        .protocol-vless { background: #28a745; }
+        .protocol-trojan { background: #dc3545; }
+        .protocol-ss { background: #ffc107; color: #333; }
+        .protocol-http { background: #6f42c1; }
+        .protocol-unknown { background: #6c757d; }
+        .node-name-input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-bottom: 10px;
+        }
+        .view-btn {
+            background: #6c757d;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .view-btn:hover {
+            background: #5a6268;
+        }
+        .import-btn {
+            background: #17a2b8;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        .import-btn:hover {
+            background: #138496;
+        }
+        .import-container {
+            margin-top: 20px;
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+        }
+        .import-textarea {
+            width: 100%;
+            height: 150px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            font-family: 'Courier New', monospace;
+        }
+        .node-full {
+            display: none;
+            margin-top: 10px;
+            word-break: break-all;
+            color: #555;
+            font-size: 13px;
+        }
         footer {
             text-align: center;
             padding: 20px;
@@ -695,7 +788,7 @@ async function KV(request, env, txt = 'LINK.txt', guest) {
             background: #f9f9f9;
         }
         @media (max-width: 768px) {
-            .links-grid {
+            .links-grid, .node-grid {
                 grid-template-columns: 1fr;
             }
             header {
@@ -793,26 +886,22 @@ async function KV(request, env, txt = 'LINK.txt', guest) {
         </div>
 
         <div class="section">
-            <h2>订阅转换配置</h2>
-            <button class="toggle-btn" id="subConfigToggle" onclick="toggleSubConfig()">查看订阅转换配置 ↓</button>
-            <div id="subConfigSection" class="hidden">
+            <h2>订阅转换 及 变量 配置</h2>
+            <button class="toggle-btn" id="configToggle" onclick="toggleConfig()">查看配置 ↓</button>
+            <div id="configSection" class="hidden">
+                <h3>订阅转换配置</h3>
                 <div class="config-form">
-                    <label for="SUBAPI">SUBAPI（订阅转换后端）：</label>
+                    <label for="SUBAPI">SUBAPI（在线订阅转换后端，目前使用CM的订阅转换功能。支持自建psub 可自行搭建https://github.com/bulianglin/psub）</label>
                     <input id="SUBAPI" class="config-input" value="${subConverter}" />
-                    <label for="SUBCONFIG">SUBCONFIG（配置文件）：</label>
+                    <label for="SUBCONFIG">SUBCONFIG（订阅配置文件）</label>
                     <input id="SUBCONFIG" class="config-input" value="${subConfig}" />
                 </div>
                 <div class="save-container">
-                    <button class="save-btn" onclick="updateSubConfig(this)">更新</button>
+                    <button class="save-btn" onclick="updateSubConfig(this)">更新订阅转换</button>
                     <span class="save-status" id="subConfigStatus"></span>
                 </div>
-            </div>
-        </div>
 
-        <div class="section">
-            <h2>编辑变量配置</h2>
-            <button class="toggle-btn" id="varToggle" onclick="toggleVars()">展开变量配置 ↓</button>
-            <div id="varSection" class="hidden">
+                <h3>变量配置</h3>
                 <div class="var-item">
                     <label for="TOKEN">TOKEN（主人访问令牌）</label>
                     <small>用于浏览器访问本配置页的路径令牌，例如设置为 abc 则访问 https://your.domain/abc</small>
@@ -820,26 +909,25 @@ async function KV(request, env, txt = 'LINK.txt', guest) {
                 </div>
                 <div class="var-item">
                     <label for="GUESTTOKEN">GUESTTOKEN（访客订阅令牌）</label>
-                    <small>访客通过 /sub?token=xxx 访问订阅链接的令牌，可随便设置或留空自动生成</small>
+                    <small>可以随便取，或者uuid生成，https://1024tools.com/uuid</small>
                     <input id="GUESTTOKEN" class="var-input" value="${guestToken}" />
                 </div>
                 <div class="var-item">
                     <label for="TGTOKEN">TGTOKEN（Telegram Bot Token）</label>
-                    <small>用于接收访问通知的 Bot Token，可留空不启用通知</small>
+                    <small>可以为空，或者@BotFather中输入/start，/newbot，并关注机器人</small>
                     <input id="TGTOKEN" class="var-input" value="${BotToken}" />
                 </div>
                 <div class="var-item">
                     <label for="TGID">TGID（Telegram Chat ID）</label>
-                    <small>接收通知的聊天ID，可通过 @userinfobot 获取</small>
+                    <small>可以为空，或者@userinfobot中获取，/start</small>
                     <input id="TGID" class="var-input" value="${ChatID}" />
                 </div>
                 <div class="var-item">
                     <label for="TOTAL">TOTAL（流量总量，单位 TB）</label>
-                    <small>订阅头显示的总流量，纯展示用，默认为 99 TB</small>
+                    <small>订阅头显示的总流量，纯展示用</small>
                     <input id="TOTAL" class="var-input" value="${total}" type="number" step="0.01" />
                 </div>
-
-                <div class="save-container" style="margin-top: 30px;">
+                <div class="save-container">
                     <button class="save-btn" onclick="updateVars(this)">更新变量</button>
                     <span class="save-status" id="varStatus"></span>
                 </div>
@@ -849,9 +937,21 @@ async function KV(request, env, txt = 'LINK.txt', guest) {
         ${hasKV ? `
         <div class="section">
             <h2>节点链接编辑</h2>
-            <textarea class="editor" id="content" placeholder="${decodeURIComponent(atob('TElOSyVFNyVBNCVCQSVFNCVCRSU4QiVFRiVCQyU4OCVFNCVCOCU4MCVFOCVBMSU4QyVFNCVCOCU4MCVFNCVCOCVBQSVFOCU4QSU4MiVFNyU4MiVCOSVFOSU5MyVCRSVFNiU4RSVBNSVFNSU4RCVCMyVFNSU4RiVBRiVFRiVCQyU4OSVFRiVCQyU5QQp2bGVzcyUzQSUyRiUyRjI0NmFhNzk1LTA2MzctNGY0Yy04ZjY0LTJjOGZiMjRjMWJhZCU0MDEyNy4wLjAuMSUzQTEyMzQlM0ZlbmNyeXB0aW9uJTNEbm9uZSUyNnNlY3VyaXR5JTNEdGxzJTI2c25pJTNEVEcuQ01MaXVzc3NzLmxvc2V5b3VyaXAuY29tJTI2YWxsb3dJbnNlY3VyZSUzRDElMjZ0eXBlJTNEd3MlMjZob3N0JTNEVEcuQ01MaXVzc3NzLmxvc2V5b3VyaXAuY29tJTI2cGF0aCUzRCUyNTJGJTI1M0ZlZCUyNTNEMjU2MCUyM0NGbmF0CnRyb2phbiUzQSUyRiUyRmFhNmRkZDJmLWQxY2YtNGE1Mi1iYTFiLTI2NDBjNDFhNzg1NiU0MDIxOC4xOTAuMjMwLjIwNyUzQTQxMjg4JTNGc2VjdXJpdHklM0R0bHMlMjZzbmklM0RoazEyLmJpbGliaWxpLmNvbSUyNmFsbG93SW5zZWN1cmUlM0QxJTI2dHlwZSUzRHRjcCUyNmhlYWRlclR5cGUlM0Rub25lJTIzSEsKc3MlM0ElMkYlMkZZMmhoWTJoaE1qQXRhV1YwWmkxd2IyeDVNVE13TlRveVJYUlFjVzQyU0ZscVZVNWpTRzlvVEdaVmNFWlJkMjVtYWtORFVUVnRhREZ0U21SRlRVTkNkV04xVjFvNVVERjFaR3RTUzBodVZuaDFielUxYXpGTFdIb3lSbTgyYW5KbmRERTRWelkyYjNCMGVURmxOR0p0TVdwNlprTm1RbUklMjUzRCU0MDg0LjE5LjMxLjYzJTNBNTA4NDElMjNERQoKCiVFOCVBRSVBMiVFOSU5OCU4NSVFOSU5MyVCRSVFNiU4RSVBNSVFNyVBNCVCQSVFNCVCRSU4QiVFRiVCQyU4OCVFNCVCOCU4MCVFOCVBMSU4QyVFNCVCOCU4MCVFNiU5RCVBMSVFOCVBRSVBMiVFOSU5OCU4NSVFOSU5MyVCRSVFNiU4RSVBNSVFNSU4RCVCMyVFNSU4RiVBRiVFRiVCQyU4OSVFRiVCQyU5QQpodHRwcyUzQSUyRiUyRnN1Yi54Zi5mcmVlLmhyJTJGYXV0bw=='))}">${content}</textarea>
-            <div class="save-container">
-                <button class="save-btn" onclick="saveContent(this)">保存配置</button>
+            <div>
+                <button class="import-btn" onclick="toggleImport('nodes')">导入节点</button>
+                <button class="import-btn" onclick="toggleImport('subs')">导入订阅</button>
+                <div id="import-nodes" class="import-container hidden">
+                    <textarea id="import-nodes-text" class="import-textarea" placeholder="粘贴批量节点链接，每行一个"></textarea>
+                    <button class="save-btn" onclick="importNodes()">添加节点</button>
+                </div>
+                <div id="import-subs" class="import-container hidden">
+                    <textarea id="import-subs-text" class="import-textarea" placeholder="粘贴订阅链接，每行一个"></textarea>
+                    <button class="save-btn" onclick="importSubs()">添加订阅节点</button>
+                </div>
+            </div>
+            <div id="node-grid" class="node-grid"></div>
+            <div class="save-container" style="margin-top: 20px;">
+                <button class="save-btn" onclick="saveAllNodes(this)">保存所有变更</button>
                 <span class="save-status" id="saveStatus"></span>
             </div>
         </div>
@@ -901,27 +1001,15 @@ async function KV(request, env, txt = 'LINK.txt', guest) {
             }
         }
 
-        function toggleSubConfig() {
-            const section = document.getElementById('subConfigSection');
-            const btn = document.getElementById('subConfigToggle');
+        function toggleConfig() {
+            const section = document.getElementById('configSection');
+            const btn = document.getElementById('configToggle');
             if (section.classList.contains('hidden')) {
                 section.classList.remove('hidden');
-                btn.innerHTML = '隐藏订阅转换配置 ↑';
+                btn.innerHTML = '隐藏配置 ↑';
             } else {
                 section.classList.add('hidden');
-                btn.innerHTML = '查看订阅转换配置 ↓';
-            }
-        }
-
-        function toggleVars() {
-            const section = document.getElementById('varSection');
-            const btn = document.getElementById('varToggle');
-            if (section.classList.contains('hidden')) {
-                section.classList.remove('hidden');
-                btn.innerHTML = '收起变量配置 ↑';
-            } else {
-                section.classList.add('hidden');
-                btn.innerHTML = '展开变量配置 ↓';
+                btn.innerHTML = '查看配置 ↓';
             }
         }
 
@@ -942,15 +1030,15 @@ async function KV(request, env, txt = 'LINK.txt', guest) {
             .then(res => {
                 if (!res.ok) throw new Error('网络错误');
                 const now = new Date().toLocaleString();
-                document.getElementById('subConfigStatus').textContent = \`更新成功 \${now}\`;
+                document.getElementById('subConfigStatus').textContent = `更新成功 ${now}`;
             })
             .catch(err => {
-                document.getElementById('subConfigStatus').textContent = \`更新失败: \${err.message}\`;
+                document.getElementById('subConfigStatus').textContent = `更新失败: ${err.message}`;
                 document.getElementById('subConfigStatus').style.color = 'red';
             })
             .finally(() => {
                 btn.disabled = false;
-                btn.textContent = '更新';
+                btn.textContent = '更新订阅转换';
             });
         }
 
@@ -959,7 +1047,7 @@ async function KV(request, env, txt = 'LINK.txt', guest) {
             btn.textContent = '更新中...';
 
             const vals = {};
-            document.querySelectorAll('#varSection .var-input').forEach(inp => {
+            document.querySelectorAll('.var-item input').forEach(inp => {
                 vals[inp.id] = inp.value;
             });
 
@@ -971,10 +1059,10 @@ async function KV(request, env, txt = 'LINK.txt', guest) {
             .then(res => {
                 if (!res.ok) throw new Error('网络错误');
                 const now = new Date().toLocaleString();
-                document.getElementById('varStatus').textContent = \`更新成功 \${now}\`;
+                document.getElementById('varStatus').textContent = `更新成功 ${now}`;
             })
             .catch(err => {
-                document.getElementById('varStatus').textContent = \`更新失败: \${err.message}\`;
+                document.getElementById('varStatus').textContent = `更新失败: ${err.message}`;
                 document.getElementById('varStatus').style.color = 'red';
             })
             .finally(() => {
@@ -984,22 +1072,105 @@ async function KV(request, env, txt = 'LINK.txt', guest) {
         }
 
         ${hasKV ? `
-        let saveTimer;
-        const textarea = document.getElementById('content');
-        let originalContent = textarea.value;
+        let nodes = [];
+        const originalContent = \`${content.replace(/`/g, '\\`')}\`;
+        if (originalContent.trim()) {
+            nodes = originalContent.split('\\n').filter(line => line.trim()).map(line => {
+                const protocolMatch = line.match(/^(\\w+):/);
+                const protocol = protocolMatch ? protocolMatch[1].toLowerCase() : 'unknown';
+                const nameMatch = line.match(/#(.+)$/);
+                const name = nameMatch ? nameMatch[1] : 'Unnamed';
+                return { full: line, protocol, name };
+            });
+            renderNodes();
+        }
 
-        function saveContent(btn) {
+        function renderNodes() {
+            const grid = document.getElementById('node-grid');
+            grid.innerHTML = '';
+            nodes.forEach((node, index) => {
+                const card = document.createElement('div');
+                card.className = 'node-card';
+                card.innerHTML = `
+                    <span class="node-protocol protocol-${node.protocol}">${node.protocol.toUpperCase()}</span>
+                    <input type="text" class="node-name-input" value="${node.name}" onchange="updateNodeName(${index}, this.value)" />
+                    <button class="view-btn" onclick="toggleNodeFull(this.nextElementSibling)">查看内容</button>
+                    <div class="node-full">${node.full}</div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        function updateNodeName(index, newName) {
+            nodes[index].name = newName;
+            nodes[index].full = nodes[index].full.replace(/#.+$/, '') + '#' + newName;
+        }
+
+        function toggleNodeFull(elem) {
+            elem.style.display = elem.style.display === 'none' ? 'block' : 'none';
+        }
+
+        function toggleImport(type) {
+            const nodesDiv = document.getElementById('import-nodes');
+            const subsDiv = document.getElementById('import-subs');
+            if (type === 'nodes') {
+                nodesDiv.classList.toggle('hidden');
+                subsDiv.classList.add('hidden');
+            } else if (type === 'subs') {
+                subsDiv.classList.toggle('hidden');
+                nodesDiv.classList.add('hidden');
+            }
+        }
+
+        function importNodes() {
+            const text = document.getElementById('import-nodes-text').value.trim();
+            if (text) {
+                const newNodes = text.split('\\n').filter(line => line.trim()).map(line => {
+                    const protocolMatch = line.match(/^(\\w+):/);
+                    const protocol = protocolMatch ? protocolMatch[1].toLowerCase() : 'unknown';
+                    const nameMatch = line.match(/#(.+)$/);
+                    const name = nameMatch ? nameMatch[1] : 'Unnamed';
+                    return { full: line, protocol, name };
+                });
+                nodes = [...nodes, ...newNodes];
+                renderNodes();
+                toggleImport('nodes');
+                document.getElementById('import-nodes-text').value = '';
+            }
+        }
+
+        async function importSubs() {
+            const text = document.getElementById('import-subs-text').value.trim();
+            if (text) {
+                const subUrls = text.split('\\n').filter(url => url.trim());
+                for (const subUrl of subUrls) {
+                    try {
+                        const response = await fetch(subUrl);
+                        let subContent = await response.text();
+                        if (isValidBase64(subContent)) subContent = atob(subContent);
+                        const newNodes = subContent.split('\\n').filter(line => line.trim()).map(line => {
+                            const protocolMatch = line.match(/^(\\w+):/);
+                            const protocol = protocolMatch ? protocolMatch[1].toLowerCase() : 'unknown';
+                            const nameMatch = line.match(/#(.+)$/);
+                            const name = nameMatch ? nameMatch[1] : 'Unnamed';
+                            return { full: line, protocol, name };
+                        });
+                        nodes = [...nodes, ...newNodes];
+                    } catch (err) {
+                        alert('导入订阅失败: ' + subUrl);
+                    }
+                }
+                renderNodes();
+                toggleImport('subs');
+                document.getElementById('import-subs-text').value = '';
+            }
+        }
+
+        function saveAllNodes(btn) {
             btn.disabled = true;
             btn.textContent = '保存中...';
 
-            const newContent = textarea.value;
-
-            if (newContent === originalContent) {
-                document.getElementById('saveStatus').textContent = '内容无变化';
-                btn.disabled = false;
-                btn.textContent = '保存配置';
-                return;
-            }
+            const newContent = nodes.map(node => node.full).join('\\n');
 
             fetch(window.location.href, {
                 method: 'POST',
@@ -1010,28 +1181,22 @@ async function KV(request, env, txt = 'LINK.txt', guest) {
                 if (!res.ok) throw new Error('网络错误');
                 const now = new Date().toLocaleString();
                 document.title = '已保存 ' + now;
-                document.getElementById('saveStatus').textContent = \`保存成功 \${now}\`;
-                originalContent = newContent;
+                document.getElementById('saveStatus').textContent = `保存成功 ${now}`;
             })
             .catch(err => {
-                document.getElementById('saveStatus').textContent = \`保存失败: \${err.message}\`;
+                document.getElementById('saveStatus').textContent = `保存失败: ${err.message}`;
                 document.getElementById('saveStatus').style.color = 'red';
             })
             .finally(() => {
                 btn.disabled = false;
-                btn.textContent = '保存配置';
+                btn.textContent = '保存所有变更';
             });
         }
-
-        textarea.addEventListener('input', () => {
-            clearTimeout(saveTimer);
-            saveTimer = setTimeout(() => saveContent(document.querySelector('.save-btn')), 3000);
-        });
         ` : ''}
     </script>
 </body>
 </html>
-`;
+		`;
 
 		return new Response(html, {
 			headers: { "Content-Type": "text/html;charset=utf-8" }
@@ -1044,3 +1209,4 @@ async function KV(request, env, txt = 'LINK.txt', guest) {
 		});
 	}
 }
+``` ` :
