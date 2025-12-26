@@ -415,11 +415,13 @@ footer p{margin:.5rem 0}
 <label for="subConverter">SUB-Converter（订阅转换服务地址）</label>
 <input id="subConverter" value="${subConverter}">
 <small>订阅转换服务的地址，用于转换订阅格式，可留空使用默认值</small>
+<small style="display:block;margin-top:.2rem;color:var(--text-light);">支持自建psub 可自行搭建 https://github.com/tgszy/Psub</small>
 </div>
 <div class="var-item" style="grid-column:1/-1">
 <label for="subConfig">SUB-Config（订阅配置文件）</label>
 <input id="subConfig" value="${subConfig}">
 <small>订阅配置文件URL，用于Clash等客户端的配置规则</small>
+<small style="display:block;margin-top:.2rem;color:var(--text-light);">规则列表 https://github.com/tgszy/ACL4SSR/tree/main/Clash/config</small>
 </div>
 <div class="var-item">
 <label for="TOKEN">TOKEN（主人令牌）</label>
