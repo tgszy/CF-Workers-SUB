@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CF-Workers-SUB 订阅管理</title>
+<style>
+:root{--primary:#6366f1;--primary-dark:#4f46e5;--text:#1f2937;--text-light:#6b7280;--bg:#f9fafb;--card:#ffffff;--border:#e5e7eb}
+[data-theme="dark"]{--text:#f3f4f6;--text-light:#9ca3af;--bg:#111827;--card:#1f2937;--border:#374151}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);margin:0;padding:20px;line-height:1.6}
+.container{max-width:1100px;margin:0 auto;background:var(--card);border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.1);overflow:hidden}
+header{background:linear-gradient(135deg,var(--primary),var(--primary-dark));color:white;padding:2rem;text-align:center;position:relative}
+header h1{margin:0;font-size:1.8rem}header p{margin:.5rem 0 0;opacity:.9}
+.theme-toggle{position:absolute;top:1rem;right:1rem;background:rgba(255,255,255,.2);border:none;color:white;padding:.5rem;border-radius:8px;cursor:pointer;font-size:1.2rem;transition:.2s}
+.theme-toggle:hover{background:rgba(255,255,255,.3)}
+.section{padding:1.8rem;border-bottom:1px solid var(--border)}
+.section:last-child{border-bottom:none}
+h2{font-size:1.4rem;margin:0 0 1rem;color:var(--text);display:flex;align-items:center;gap:.5rem}
+h2::before{content:"";width:6px;height:1.6em;background:var(--primary);border-radius:3px}
+.sub-container{display:grid;grid-template-columns:1fr 1fr;gap:2rem;margin-top:.8rem;align-items:center}
+.sub-buttons{display:grid;grid-template-columns:repeat(3,1fr);gap:.4rem;max-height:280px}
+.sub-buttons .section-title{grid-column:1/-1;text-align:center;font-weight:600;color:var(--primary);margin:.3rem 0;font-size:.9rem}
+.sub-buttons.compact .sub-btn{padding:.4rem .3rem;font-size:.8rem;line-height:1.1}
+.sub-btn{padding:.5rem .4rem;background:var(--bg);border:1px solid var(--border);border-radius:8px;text-align:center;cursor:pointer;font-size:.85rem;transition:.2s;line-height:1.2}
+.sub-btn:hover{background:var(--primary);color:white;border-color:var(--primary)}
+.qrcode-display{background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:1rem;text-align:center;display:flex;flex-direction:column;justify-content:center;align-items:center;width:240px;height:240px;box-sizing:border-box;overflow:hidden;margin:0 auto}
+.qrcode-display .placeholder{color:var(--text-light);font-size:1.1rem}
+#qr-temp{margin:1rem 0}
+.link-info{word-break:break-all;margin:.8rem 0;color:var(--text-light);font-size:.9rem;max-width:90%}
+.copy-btn{background:var(--primary);color:white;border:none;padding:.6rem 1.2rem;border-radius:8px;cursor:pointer;margin-top:.5rem}
+.save-container{margin-top:1rem;display:flex;align-items:center;gap:1rem}
+.save-btn{background:var(--primary);color:white;border:none;padding:.7rem 1.5rem;border-radius:8px;cursor:pointer}
+.toggle-btn{background:none;border:none;color:var(--primary);font-size:1rem;cursor:pointer;margin-top:.5rem}
+.toggle-btn:hover{text-decoration:underline}
+.hidden{display:none}
+.var-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:1.5rem}
+.var-item label{display:block;margin-bottom:.4rem;font-weight:600}
+.var-item small{display:block;color:var(--text-light);font-size:.85rem;margin-top:.3rem}
+.var-item input{width:100%;padding:.7rem;border:1px solid var(--border);border-radius:8px;box-sizing:border-box}
+#content{width:100%;height:300px;padding:1rem;border:1px solid var(--border);border-radius:10px;font-family:'JetBrains Mono',monospace;font-size:14.5px;background:var(--bg);color:var(--text);resize:vertical;box-sizing:border-box}
+#content:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(99,102,241,.2)}
+footer{text-align:center;padding:1.5rem;font-size:.9rem;color:var(--text-light);background:var(--bg)}
+@media (max-width:768px){
+.sub-container{grid-template-columns:1fr;gap:1.5rem;align-items:center;margin-top:1rem}
+.sub-buttons{grid-template-columns:1fr;gap:1rem;max-height:none}
+.sub-btn{font-size:1.1rem;padding:1.2rem 1rem;line-height:1.3;border-radius:10px;min-height:56px}
+.sub-buttons .section-title{font-size:1rem;margin:.5rem 0}
+.qrcode-display{width:280px;height:280px;margin:1.5rem auto;padding:1.2rem}
+.qrcode-display .placeholder{font-size:1.2rem}
+.var-grid{grid-template-columns:1fr;gap:1.2rem}
+.var-item label{font-size:1rem;margin-bottom:.6rem}
+.var-item input{padding:.8rem;border-radius:10px;font-size:1rem}
+#content{height:250px;padding:1rem;border-radius:10px;font-size:16px}
+.toggle-btn{font-size:1.1rem;padding:.8rem 0}
+.save-btn{font-size:1rem;padding:1rem 1.5rem;border-radius:10px}
+.save-container{gap:.8rem;flex-wrap:wrap}
+.theme-toggle{font-size:1.2rem;padding:.6rem;border-radius:8px}
+h1{font-size:1.6rem;line-height:1.3}
+h2{font-size:1.3rem;margin:0 0 1.2rem}
+.section{padding:1.5rem}
+.container{padding:0 1rem}
+.link-info{font-size:.8rem}
+.copy-btn{font-size:.8rem;padding:.4rem .8rem}
+footer{font-size:.85rem;padding:1.2rem}
+footer p{margin:.5rem 0}
+}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/jetbrains-mono@4.5.12/index.min.css">
+</head>
+<body>
+<div class="container">
+<header>
+  <button class="theme-toggle" id="themeToggle" title="切换主题">🌙</button>
+  <h1>CF-Workers-SUB 订阅管理</h1><p>自建节点 + 机场聚合订阅转换</p>
+</header>
+
+<div class="section">
+<h2>订阅连接</h2>
+<div class="sub-container">
+<div class="sub-buttons" id="subscription-buttons"></div>
+<div class="qrcode-display" id="qrcode-display"><p class="placeholder">点击左侧按钮生成二维码</p></div>
+</div>
+</div>
+
+<div class="section">
+<h2>变量配置</h2>
+<button class="toggle-btn" id="varToggle">展开配置 ↓</button>
+<div id="varSection" class="hidden">
+<div class="var-grid">
+<div class="var-item" style="grid-column:1/-1">
+<label for="subConverter">SUB-Converter（订阅转换服务地址）</label>
+<input id="subConverter" value="SUBAPI.cmliussss.net">
+<small>订阅转换服务的地址，用于转换订阅格式，可留空使用默认值</small>
+</div>
+<div class="var-item" style="grid-column:1/-1">
+<label for="subConfig">SUB-Config（订阅配置文件）</label>
+<input id="subConfig" value="https://raw.githubusercontent.com/cmliu/ACL4SSR/main/Clash/config/ACL4SSR_Online_MultiCountry.ini">
+<small>订阅配置文件URL，用于Clash等客户端的配置规则</small>
+</div>
+<div class="var-item">
+<label for="TOKEN">TOKEN（主人令牌）</label>
+<input id="TOKEN" value="auto">
+<small>用于浏览器访问本配置页的路径令牌，例如设置为 abc 则访问 https://your.domain/abc</small>
+</div>
+<div class="var-item">
+<label for="GUESTTOKEN">GUESTTOKEN（访客令牌）</label>
+<input id="GUESTTOKEN" value="6ac0974f22bda6966c4538638523ebd5">
+<small>访客通过 /sub?token=xxx 访问订阅链接的令牌，可随便设置或留空自动生成</small>
+<small style="display:block;margin-top:.2rem;color:#ef4444;">访客令牌修改后，更新变量后访客订阅未刷新，实际已生效，需要刷新页面</small>
+</div>
+<div class="var-item">
+<label for="TGTOKEN">TGTOKEN（Telegram Bot Token）</label>
+<input id="TGTOKEN" value="">
+<small>用于接收访问通知的 Bot Token，可留空不启用通知</small>
+</div>
+<div class="var-item">
+<label for="TGID">TGID（Telegram Chat ID）</label>
+<input id="TGID" value="">
+<small>接收通知的聊天ID，可通过 @userinfobot 获取</small>
+</div>
+</div>
+<div class="save-container" style="margin-top:1.5rem">
+<button class="save-btn" onclick="updateVars(this)">更新变量</button>
+<span class="save-status" id="varStatus"></span>
+</div>
+</div>
+</div>
+
+<div class="section">
+<h2>节点链接编辑</h2>
+<textarea id="content" placeholder="每行一个节点或者机场订阅链接
+节点示例：
+vless://
+vmess://
+trojan://
+tuic://
+机场订阅链接
+
+#号可作为 节点备注也可修改节点默认名称
+Vmess节点 可使用Base64解码后，修改节点名称后再重新编码后导入使用"></textarea>
+<div class="save-container">
+<button class="save-btn" onclick="saveContent(this)">保存配置</button>
+<span class="save-status" id="saveStatus"></span>
+</div>
+</div>
+
+<footer>
+<p>Telegram: <a href="https://t.me/CMLiussss">@CMLiussss</a> | GitHub: <a href="https://github.com/cmliu/CF-Workers-SUB">cmliu/CF-Workers-SUB</a></p>
+</footer>
+</div>
+
+<script>
+// 主题切换功能
+const themeToggle = document.getElementById('themeToggle');
+const savedTheme = localStorage.getItem('theme') || 'light';
+if (savedTheme === 'dark') {
+    document.documentElement.setAttribute('data-theme', 'dark');
+    themeToggle.textContent = '☀️';
+}
+
+themeToggle.onclick = () => {
+    const html = document.documentElement;
+    const isDark = html.getAttribute('data-theme') === 'dark';
+    if (isDark) {
+        html.removeAttribute('data-theme');
+        themeToggle.textContent = '🌙';
+        localStorage.setItem('theme', 'light');
+    } else {
+        html.setAttribute('data-theme', 'dark');
+        themeToggle.textContent = '☀️';
+        localStorage.setItem('theme', 'dark');
+    }
+};
+
+function createSubscriptionButtons() {
+	const container = document.getElementById('subscription-buttons');
+	
+	// 清除现有按钮
+	container.innerHTML = '';
+	
+	// 添加主人订阅标题
+	const ownerTitle = document.createElement('div');
+	ownerTitle.className = 'section-title';
+	ownerTitle.textContent = '主人订阅';
+	container.appendChild(ownerTitle);
+	
+	// 主人订阅链接（固定不变）
+	const ownerLinks = [
+		["自适应订阅", location.origin + "/auto"],
+		["Base64 订阅", location.origin + "/auto?b64"],
+		["Clash 订阅", location.origin + "/auto?clash"],
+		["Sing-box 订阅", location.origin + "/auto?sb"],
+		["Surge 订阅", location.origin + "/auto?surge"],
+		["Loon 订阅", location.origin + "/auto?loon"]
+	];
+	
+	// 添加主人订阅按钮（所有按钮）
+	ownerLinks.forEach(([name, link]) => {
+		const btn = document.createElement('button');
+		btn.className = 'sub-btn';
+		btn.textContent = name;
+		btn.onclick = () => generateQR(link, 'qrcode-display', name);
+		container.appendChild(btn);
+	});
+	
+	// 添加访客订阅标题
+	const guestTitle = document.createElement('div');
+	guestTitle.className = 'section-title';
+	guestTitle.textContent = '访客订阅';
+	container.appendChild(guestTitle);
+	
+	// 获取当前GUESTTOKEN值（优先使用KV中的值）
+	const guestTokenInput = document.getElementById('GUESTTOKEN');
+	const guestToken = (guestTokenInput && guestTokenInput.value) ? guestTokenInput.value : '6ac0974f22bda6966c4538638523ebd5';
+	const guestBase = location.origin + "/sub?token=" + guestToken;
+	
+
+	
+	// 重新构建访客订阅链接
+	const guestLinks = [
+		["访客自适应", guestBase],
+		["访客 Base64", guestBase + "&b64"],
+		["访客 Clash", guestBase + "&clash"],
+		["访客 Sing-box", guestBase + "&sb"],
+		["访客 Surge", guestBase + "&surge"],
+		["访客 Loon", guestBase + "&loon"]
+	];
+	
+	// 添加访客订阅按钮（所有按钮）
+	guestLinks.forEach(([name, link]) => {
+		const btn = document.createElement('button');
+		btn.className = 'sub-btn';
+		btn.textContent = name;
+		btn.onclick = () => generateQR(link, 'qrcode-display', name);
+		container.appendChild(btn);
+	});
+	
+	// 添加访客订阅提示文本
+	const guestWarning = document.createElement('div');
+	guestWarning.style.cssText = 'grid-column:1/-1;text-align:center;color:var(--text-light);font-size:.8rem;margin-top:.3rem;padding:.3rem .5rem;background:var(--bg);border:1px dashed var(--border);border-radius:6px;';
+	guestWarning.textContent = '注意：访客订阅仅提供订阅功能，访问不了面板';
+	container.appendChild(guestWarning);
+}
+
+function generateQR(link, displayId, name) {
+	const display = document.getElementById(displayId);
+	display.innerHTML = `
+		<h3 style="margin:0 0 .3rem;font-size:.9rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%">${name}</h3>
+		<div id="qr-temp" style="display:flex;justify-content:center;align-items:center;"></div>
+		<p class="link-info" style="word-break:break-all;margin:.3rem 0;color:var(--text-light);font-size:.7rem;max-width:100%;line-height:1.2">${link}</p>
+		<button class="copy-btn" onclick="navigator.clipboard.writeText('${link}').then(()=>alert('已复制！')).catch(()=>prompt('复制失败，手动复制：','${link}'))" style="background:var(--primary);color:white;border:none;padding:.3rem .6rem;border-radius:6px;cursor:pointer;font-size:.7rem;margin-top:.2rem">复制链接</button>
+	`;
+	new QRCode(document.getElementById("qr-temp"), {
+		text: link,
+		width: 120,
+		height: 120,
+		colorDark: "#000000",
+		colorLight: "#ffffff",
+		correctLevel: QRCode.CorrectLevel.H
+	});
+}
+
+// 页面初始化时获取KV中的最新变量值
+initializeVars().then(() => {
+    createSubscriptionButtons();
+});
+
+document.getElementById('varToggle').onclick = () => {
+	const sec = document.getElementById('varSection');
+	const btn = document.getElementById('varToggle');
+	sec.classList.toggle('hidden');
+	btn.textContent = sec.classList.contains('hidden') ? '展开配置 ↓' : '收起配置 ↑';
+};
+
+function saveContent(btn) {
+	btn.disabled = true; btn.textContent = '保存中...';
+	document.getElementById('saveStatus').textContent = '保存成功 ' + new Date().toLocaleString();
+	setTimeout(() => {
+		btn.disabled = false; 
+		btn.textContent = '保存配置';
+	}, 1000);
+}
+
+// 页面初始化时从KV获取最新变量值
+async function initializeVars() {
+    try {
+        const response = await fetch('/getVars');
+        if (response.ok) {
+            const vars = await response.json();
+            
+            // 更新输入框值
+            const inputs = ['subConverter', 'subConfig', 'TOKEN', 'GUESTTOKEN', 'TGTOKEN', 'TGID'];
+            inputs.forEach(id => {
+                const elem = document.getElementById(id);
+                if (elem && vars[id]) {
+                    elem.value = vars[id];
+                }
+            });
+        }
+    } catch (error) {
+        console.log('获取变量失败，使用默认值:', error);
+    }
+}
+
+// 更新变量到KV存储
+async function updateVars(btn) {
+    btn.disabled = true;
+    btn.textContent = '更新中...';
+    const status = document.getElementById('varStatus');
+    
+    try {
+        const data = {};
+        const inputs = ['subConverter', 'subConfig', 'TOKEN', 'GUESTTOKEN', 'TGTOKEN', 'TGID'];
+        
+        inputs.forEach(id => {
+            const elem = document.getElementById(id);
+            if (elem) {
+                data[id] = elem.value;
+            }
+        });
+        
+        // 如果GUESTTOKEN为空，强制设置为默认值
+        if (!data.GUESTTOKEN || data.GUESTTOKEN.trim() === '') {
+            data.GUESTTOKEN = '6ac0974f22bda6966c4538638523ebd5';
+            document.getElementById('GUESTTOKEN').value = '6ac0974f22bda6966c4538638523ebd5';
+        }
+        
+        const response = await fetch('/update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        
+        if (response.ok) {
+            status.textContent = '✓ 更新成功';
+            status.style.color = '#16a34a';
+            
+            // 立即从KV获取最新值并更新UI
+            await initializeVars();
+            
+            // 清除二维码显示，因为访客订阅链接可能已经更新
+            const qrcodeDisplay = document.getElementById('qrcode-display');
+            if (qrcodeDisplay) {
+                qrcodeDisplay.innerHTML = '<p style="color:var(--text-light);text-align:center;margin-top:2rem;">二维码已清除，请重新点击访客订阅按钮生成新二维码</p>';
+            }
+            
+            // 重新生成订阅按钮，确保使用最新的GUESTTOKEN
+            createSubscriptionButtons();
+            
+            // 清除临时状态
+            setTimeout(() => {
+                status.textContent = '';
+            }, 3000);
+        } else {
+            status.textContent = '✗ 更新失败';
+            status.style.color = '#dc2626';
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        status.textContent = '✗ 网络错误';
+        status.style.color = '#dc2626';
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '更新变量';
+    }
+}
+</script>
+</body>
+</html>
