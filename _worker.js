@@ -248,13 +248,15 @@ async function KV(request, env, txt = 'LINK.txt', guest) {
 			if (url.pathname === '/update') {
 				try {
 					const data = JSON.parse(body);
-					// 只保存我们需要的四个变量（TOTAL 已移除）
+					// 保存所有6个变量
 					if (data.TOKEN !== undefined) await env.KV.put('TOKEN', data.TOKEN);
 					if (data.GUESTTOKEN !== undefined) {
 						await env.KV.put('GUESTTOKEN', data.GUESTTOKEN);
 					}
 					if (data.TGTOKEN !== undefined) await env.KV.put('TGTOKEN', data.TGTOKEN);
 					if (data.TGID !== undefined) await env.KV.put('TGID', data.TGID);
+					if (data.subConverter !== undefined) await env.KV.put('SUBAPI', data.subConverter);
+					if (data.subConfig !== undefined) await env.KV.put('SUBCONFIG', data.subConfig);
 					
 					// 如果GUESTTOKEN为空字符串，强制清除KV中的旧值并使用默认值
 					if (data.GUESTTOKEN === '') {
@@ -271,11 +273,13 @@ async function KV(request, env, txt = 'LINK.txt', guest) {
 			// 处理内容保存请求
 			try {
 				const data = JSON.parse(body);
-				// 只保存我们需要的四个变量（TOTAL 已移除）
+				// 保存所有6个变量
 				if (data.TOKEN !== undefined) await env.KV.put('TOKEN', data.TOKEN);
 				if (data.GUESTTOKEN !== undefined) await env.KV.put('GUESTTOKEN', data.GUESTTOKEN || ''); // 支持空值
 				if (data.TGTOKEN !== undefined) await env.KV.put('TGTOKEN', data.TGTOKEN);
 				if (data.TGID !== undefined) await env.KV.put('TGID', data.TGID);
+				if (data.subConverter !== undefined) await env.KV.put('SUBAPI', data.subConverter);
+				if (data.subConfig !== undefined) await env.KV.put('SUBCONFIG', data.subConfig);
 				
 				// 如果GUESTTOKEN为空，强制清除KV中的旧值并使用默认值
 				if (!data.GUESTTOKEN || data.GUESTTOKEN.trim() === '') {
